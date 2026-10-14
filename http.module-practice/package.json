@@ -1,0 +1,11 @@
+{
+  "name": "node-rest-api-practice",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hands-on Node.js REST API practice using the built-in http module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  }
+}
