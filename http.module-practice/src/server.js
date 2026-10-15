@@ -1,51 +1,15 @@
-const http = require("node:http");
+import http from "node:http"
+import readJsonBody from "./readJsonBody.js";
+import { students } from "./students.js";
+import sendJson from "./sendJson.js";
+import 'dotenv/config';
 
-const PORT = 3000;
-
-const students = [
-  { id: 1, name: "Alice Wani", course: "Node.js" },
-  { id: 2, name: "David Mori", course: "JavaScript" },
-  { id: 3, name: "Grace Roba", course: "Web Development" },
-  { id: 4, name: 'Derick Duku', course: "Node.js" },
-  { id: 5, name: "Brenda Edea", course: "Node.js and Express" },
-];
-
-function sendJson(res, statusCode, data) {
-  res.writeHead(statusCode, {"Content-Type": "application/json"});
-  // res.statusCode = statusCode;
-  // res.setHeader("Content-Type", "application/json");
-  res.end(JSON.stringify(data));
-}
-
-function readJsonBody(req) {
-  return new Promise((resolve, reject) => {
-    if (req.headers["content-type"] !== "application/json") {
-      reject(new Error("Content-Type must be a json"));
-    }
-
-    let body = "";
-    req.on("data", (chunk) => { return body += chunk});
-
-    req.on("end", () => {
-      try{
-        let json = JSON.parse(body);
-        resolve(json);
-      }catch(error){
-        reject(new Error("Response was not found and invalid JSON"));
-      }
-    })
-
-    req.on("error", (err) => {
-      reject(new Error("Response was not found and invalid JSON"));
-    })
-  })
-}
+const port = process.env.PORT || 8080;
 
 const server = http.createServer(async (req, res) => {
 
   const url = new URL(req.url, `http://localhost:${PORT}`);
   const pathname = url.pathname;
-
   console.log(`${req.method} ${req.url}`);
 
   try {
@@ -127,6 +91,6 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, () => {
-  console.log(`Student API running at http://localhost:${PORT}`);
+server.listen(port, () => {
+  console.log(`Student API running at http://localhost:${port}`);
 });
