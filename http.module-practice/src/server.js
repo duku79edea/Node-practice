@@ -3,12 +3,13 @@ import readJsonBody from "./readJsonBody.js";
 import { students } from "./students.js";
 import sendJson from "./sendJson.js";
 import 'dotenv/config';
+import { sensitiveHeaders } from "node:http2";
 
 const port = process.env.PORT || 8080;
 
 const server = http.createServer(async (req, res) => {
 
-  const url = new URL(req.url, `http://localhost:${PORT}`);
+  const url = new URL(req.url, `http://localhost:${port}`);
   const pathname = url.pathname;
   console.log(`${req.method} ${req.url}`);
 
@@ -36,58 +37,114 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === "GET" && /^\/students\/\d+$/.test(pathname)) {
-      const id = pathname.substring(pathname.lastIndexOf("/") + 1);
-      const students = students.find((student) => {
-        return students.id === id;
-      })
+      const idStr = pathname.substring(pathname.lastIndexOf("/") + 1);
+      const trgId = Number(idStr);
 
-      if(!students) {
+      const foundStudent = students.find((student) => {
+        return student.id === trgId;
+      })
+      if(!foundStudent) {
         sendJson(res, 404, {ERROR: "Student Not Found"});
         return;
       }
 
-      sendJson(res, 200, students);
+      sendJson(res, 200, foundStudent);
       return;
     }
 
-    // STAGE 4: POST /students
     if (req.method === "POST" && pathname === "/students") {
       const body = await readJsonBody(req);
 
-      if(!body || typeof body === "object" || Array.isArray(body) || !body.name || typeof body.name !== "string"
-          || !body.course || typeof body.course !== "string" || !body.name.trim() || !body.name.trim()
-      ) {
-        sendJson(res, 404, {ERROR: "Invalid student name and course, please try again with the post request"});
+      if(!body || typeof body !== "object" || Array.isArray(body) || !body.name || typeof body.name !== "string"
+          || !body.course || typeof body.course !== "string" || !body.name.trim() || !body.course.trim())
+      {
+        sendJson(res, 404, {
+          ERROR: "Invalid student name and course, please try again with a new post request"
+        });
+        return;
       }
 
-      // TODO: assign a unique ID, add the student, return status 201
+      const newId = students.reduce((maxId, student) => Math.max(maxId, student.id || 0), 0) + 1;
+
+      const newStudent = {
+        id: newId,
+        name: body.name.trim(),
+        course: body.course.trim(),
+      }
+
+      students.push(newStudent);
+      sendJson(res, 201, {message: "Student added", student: newStudent});
       return;
     }
 
-    // STAGE 5: PUT /students/:id and PATCH /students/:id
-    if (
-      (req.method === "PUT" || req.method === "PATCH") &&
-      /^\/students\/\d+$/.test(pathname)
-    ) {
-      // TODO: find student or return 404
-      // TODO: parse and validate the request body
-      // TODO: PUT replaces fields; PATCH updates only supplied fields
+    if ((req.method === "PUT" || req.method === "PATCH") && /^\/students\/\d+$/.test(pathname)) {
+      const idStr = pathname.substring(pathname.lastIndexOf("/") + 1);
+      const trgId = Number(idStr);
+
+      const foundIndex = students.findIndex((student) => student.id === trgId);
+      if(foundIndex === -1) {
+        sendJson(res, 404, {error: "Student Not Found"});
+      }
+
+      const body = await readJsonBody(req);
+      if(!body || typeof body !== "object" || Array.isArray(body)) {
+        sendJson(res, 404, {error: "Invalid Json body"})
+        return;
+      }
+      const currentStudent = students[foundIndex];
+      if(req.method === "PUT"){
+        if(!body.name || typeof body.name !== "string" || !body.name.trim() || !body.course || typeof body.course !== "string" || !body.course.trim()){
+          sendJson(res, 404, {error: "Not a valid put request, both the name and course should not be empty strings"})
+        }
+        students[foundIndex] = {
+          id: trgId,
+          name: body.name.trim(),
+          course: body.course.trim()
+        }
+      } else if(req.method === 'PATCH'){
+        const updatedName = body.name !== undefined ? body.name : currentStudent.name;
+        const updatedCourse = body.course !== undefined ? body.course : currentStudent.course;
+
+        if(typeof updatedName !== "string" || typeof updatedCourse !== "string" || !updatedName.trim() || !updatedCourse.trim()) {
+          sendJson(res, 404, {error: "Course and name can not be empty strings"})
+        }
+      }
+      students[foundIndex] = {
+        id: trgId,
+        name: updatedName.trim(),
+        course: updatedCourse.trim()
+      }
+      sendJson(res, 200, {message: "Student Added", student: students[foundIndex]});
       return;
     }
 
-    // STAGE 6: DELETE /students/:id
     if (req.method === "DELETE" && /^\/students\/\d+$/.test(pathname)) {
-      // TODO: find the student's index
-      // TODO: return 404 if missing, otherwise remove and return success
+        const idStr = pathname.substring(pathname.lastIndexOf("/") + 1);
+      const trgId = Number(idStr);
+
+      const foundIndex = students.findIndex((student) => student.id === trgId);
+      if(foundIndex === -1) {
+        sendJson(res, 404, {error: "Student Not Found"});
+      }
+
+      const [deletedStudent] = students.splice(foundIndex, 1);
+
+      sendJson(res, 201, {message: "Successfully delted the student", student: deletedStudent})
       return;
     }
 
-    // STAGE 7: unknown routes should return a JSON 404.
-    // TODO: send a JSON error response.
+    sendJson(res, 404, {error: `Route ${req.method} and ${pathname} not found`})
+    return;
   } catch (error) {
-    // STAGE 7: handle invalid JSON and unexpected errors safely.
-    // TODO: do not send a second response if one has already ended.
     console.error(error);
+    if(res.writableEnded) return ;
+    if(error instanceof SyntaxError){
+      sendJson(res, 404, {error: "Invalid JSON format"});
+      return;
+    }
+
+    sendJson(res, 500, {Error: "Internal server error"});
+    return;
   }
 });
 
